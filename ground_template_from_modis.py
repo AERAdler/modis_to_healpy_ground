@@ -18,10 +18,34 @@ def dBdT(tb, nu):
     slope = 2*k_b*nu**2/c**2*((x/2)/np.sinh(x/2))**2
     return slope
 
+def modis_to_healpix(file, map_scale=0.05, nside=512):
+    """
+    Changes modis data to a healpix map
+    Arguments: 
+    ----------
+    file      : pyhdf.SD
+    A file with temperature data
+    
+    Keyword arguments:
+    ----------
+    map_scale : float
+    Separation between two points in the hd5 data in degrees (default : 0.05)
+    nside     : int
+    Healpix nside of the outupt map (default : 512)
+    """
+
+    data = file.select('LST_Day_CMG').get()/50.
+    tht = np.radians(np.arange(0, 180, modis_map_scale))
+    phi = np.radians(np.arange(0, 360, modis_map_scale))
+    theta_modis, phi_modis = np.meshgrid(tht, phi)
+    healp_map = np.zeros(hp.nside2npix(512))
+    healp_map[hp.ang2pix(512, tht, phi)]=np.swapaxes(data, 1,0)
+    return healp_map
+
 def rotate_to_point(inmap, lat, lon):
     """
     Rotates healpy such that the North Pole is at the point defined by
-    (lat lon).
+    (lat lon). Returns rotated map
     Arguments: 
     ----------
     inmap : (12*N*N,) array of floats
@@ -48,7 +72,7 @@ def telescope_view_angles(nside, h, surf_h=0., R = 6.371e6):
     Calculates how the coordinates of a sphere of radius R with a given
     nside project on the view of an outside observer located at a distance
     h away from the north pole. Returns visible coordinates on the sphere 
-    and corresponding coordinates for the observer
+    and corresponding coordinates for the observer.
 
     Arguments: 
     ----------
@@ -78,19 +102,12 @@ def telescope_view_angles(nside, h, surf_h=0., R = 6.371e6):
     phi_from_tel = np.pi - phi_visible #Therefore left is right
     return(theta_visible, phi_visible, theta_from_tel, phi_from_tel)
 
-    def ground_template(
-        inmap, 
-        theta_visible, 
-        phi_visible, 
-        theta_from_tel, 
-        phi_from_tel, 
-        nside_out=128, 
-        cmb=True, 
-        freq=95.,
-        frac_bwidth=.2):
+    def ground_template(inmap, theta_visible, phi_visible, theta_from_tel,
+                        phi_from_tel, nside_out=128, cmb=True, freq=95., 
+                        frac_bwidth=.2):
     """
-    Creates a ground template given a world map and sets of coordinates (see telescope_view_angles)
-    Returns a filled-out ground template
+    Creates a ground template given a world map and sets of coordinates 
+    (see telescope_view_angles) Returns a filled-out ground template.
     Arguments: 
     ----------
     inmap          : (12*N*N,) array of floats
@@ -129,7 +146,7 @@ def telescope_view_angles(nside, h, surf_h=0., R = 6.371e6):
                 bolo = np.trapz(tb2b(tb, freq_band), freq_band)
                 corr = np.trapz(dBdT(T_cmb, freq_band), freq_band)
                 ground_map[i] = bolo/corr*1e6
-    
+
     pix_pow = int(np.log2(nside_out))
     map_low = hp.ud_grade(ground_map, 2)
 
@@ -144,16 +161,42 @@ def telescope_view_angles(nside, h, surf_h=0., R = 6.371e6):
 
     return(map_normal)
 
-def template_from_position(earth_map, lat, lon, altitude, nside_out=128, 
+def template_from_position(earth_map, lat, lon, h, nside_out=128, 
     cmb=True, freq=95., frac_bwidth=.2):
+    """
+    Creates a ground template given a world map, a position and an altitude.
+    Returns a filled-out ground template.
+    Arguments: 
+    ----------
+    earth_map          : (12*N*N,) array of floats
+    Input map in K, in the healpix RING format
+    lat   : float
+    Latitude of point on the map [-90;90]
+    lon   : float
+    Longitude of point on the map [-180;80]
+    h      : float
+    Altitude of observer above reference level in m
+
+    Keyword arguments:
+    ----------
+    nside_out   : int
+    Healpix nside of the output ground template (default : 128)
+    cmb         : bool
+    Convert the temperatures to CMB temperature units (default : True)
+    freq        : float
+    Frequency at which temperature is measured, in GHz (default : 95)
+    frac_bwidth : float
+    Bandwidth of the measurement, as a fraction of freq (default : 0.2)
+    """
 
     nside_world = hp.npix2nside(earth_map.shape[0])
     earth_rot = rotate_to_point(earth_map, lat, lon)
     theta_visible, phi_visible, theta_from_tel, phi_from_tel = telescope_view_angles(
-        nside_world, altitude, surf_h=0, R =6.371e6)
-    ground_temp = ground_template(inmap, 
-                    theta_visible, phi_visible, theta_from_tel, phi_from_tel, 
-                    nside_out=nside_out, cmb=cmb, freq=freq, frac_bwidth=frac_bwidth)
+        nside_world, h, surf_h=0, R=6.371e6)
+    ground_temp = ground_template(inmap, theta_visible, phi_visible, 
+                                  theta_from_tel, phi_from_tel, 
+                                  nside_out=nside_out, cmb=cmb, freq=freq, 
+                                  frac_bwidth=frac_bwidth)
 
 
 
