@@ -18,7 +18,7 @@ def dBdT(tb, nu):
     slope = 2*k_b*nu**2/c**2*((x/2)/np.sinh(x/2))**2
     return slope
 
-def modis_to_healpix(file, map_scale=0.05, nside=512):
+def modis_to_healpix(file, field, temp_scale=1., map_scale=0.05, nside=512):
     """
     Changes modis data to a healpix map
     Arguments: 
@@ -34,7 +34,7 @@ def modis_to_healpix(file, map_scale=0.05, nside=512):
     Healpix nside of the outupt map (default : 512)
     """
 
-    data = file.select('LST_Day_CMG').get()/50.
+    data = file.select(field).get()/temp_scale
     tht = np.radians(np.arange(0, 180, modis_map_scale))
     phi = np.radians(np.arange(0, 360, modis_map_scale))
     theta_modis, phi_modis = np.meshgrid(tht, phi)
@@ -57,8 +57,8 @@ def rotate_to_point(inmap, lat, lon):
     """
 
     nside = hp.npix2nside(inmap.shape[0])
-    rlon = np.radians(tel_lon)-np.pi
-    rlat = np.pi/2.-np.radians(tel_lat)
+    rlon = np.radians(lon)-np.pi
+    rlat = np.pi/2.-np.radians(lat)
     x0, y0, z0 = hp.pix2vec(512, np.arange(hp.nside2npix(512)))
     x1 =  x0*np.cos(rlat)+z0*np.sin(rlat)
     z = -x0*np.sin(rlat)+z0*np.cos(rlat)
@@ -96,15 +96,15 @@ def telescope_view_angles(nside, h, surf_h=0., R = 6.371e6):
     theta_visible = theta[theta<theta_fov]
     phi_visible = phi[theta<theta_fov]
 
-    theta_from_tel = np.arctan2(r_anta*np.sin(theta_visible), 
-                                r_anta*(1 - np.cos(theta_visible)) + h_abg)
+    theta_from_tel = np.arctan2(r_ground*np.sin(theta_visible), 
+                                r_ground*(1 - np.cos(theta_visible)) + h_abg)
     theta_from_tel = np.pi - theta_from_tel #Up is down
     phi_from_tel = np.pi - phi_visible #Therefore left is right
     return(theta_visible, phi_visible, theta_from_tel, phi_from_tel)
 
-    def ground_template(inmap, theta_visible, phi_visible, theta_from_tel,
-                        phi_from_tel, nside_out=128, cmb=True, freq=95., 
-                        frac_bwidth=.2):
+def ground_template(inmap, theta_visible, phi_visible, theta_from_tel,
+                    phi_from_tel, nside_out=128, cmb=True, freq=95., 
+                    frac_bwidth=.2):
     """
     Creates a ground template given a world map and sets of coordinates 
     (see telescope_view_angles) Returns a filled-out ground template.
@@ -162,7 +162,7 @@ def telescope_view_angles(nside, h, surf_h=0., R = 6.371e6):
     return(map_normal)
 
 def template_from_position(earth_map, lat, lon, h, nside_out=128, 
-    cmb=True, freq=95., frac_bwidth=.2):
+                           cmb=True, freq=95., frac_bwidth=.2):
     """
     Creates a ground template given a world map, a position and an altitude.
     Returns a filled-out ground template.
@@ -193,10 +193,11 @@ def template_from_position(earth_map, lat, lon, h, nside_out=128,
     earth_rot = rotate_to_point(earth_map, lat, lon)
     theta_visible, phi_visible, theta_from_tel, phi_from_tel = telescope_view_angles(
         nside_world, h, surf_h=0, R=6.371e6)
-    ground_temp = ground_template(inmap, theta_visible, phi_visible, 
+    ground_temp = ground_template(earth_rot, theta_visible, phi_visible, 
                                   theta_from_tel, phi_from_tel, 
                                   nside_out=nside_out, cmb=cmb, freq=freq, 
                                   frac_bwidth=frac_bwidth)
+    return ground_temp
 
 
 
