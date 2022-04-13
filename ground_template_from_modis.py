@@ -159,7 +159,7 @@ def ground_template(inmap, theta_visible, phi_visible, theta_from_tel,
             hp.ud_grade(map_low, nside)[map_horizon:])
         map_low = map_normal       
 
-    return(map_normal)
+    return map_normal
 
 def template_from_position(earth_map, lat, lon, h, nside_out=128, 
                            cmb=True, freq=95., frac_bwidth=.2):
